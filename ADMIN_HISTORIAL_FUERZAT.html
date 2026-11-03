@@ -1,0 +1,79 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fuerza T · Administración del historial</title><style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Arial;background:#f0efed;color:#171717}*{box-sizing:border-box}body{margin:0}main{max-width:1000px;margin:auto;padding:20px}header{background:#101010;color:#fff;padding:27px;border-radius:18px}h1{margin:6px 0;font-size:28px}header p{color:#b9b9b9;margin:0;font-size:13px}.eyebrow{font-size:11px;font-weight:800;letter-spacing:.1em;color:#fa7443}.panel{background:#fff;border-radius:16px;padding:20px;margin-top:15px;box-shadow:0 2px 10px #00000009}h2{font-size:18px;margin:0 0 12px}.line{display:flex;gap:10px;flex-wrap:wrap;align-items:end}.line>*{flex:1;min-width:160px}label{display:block;font-size:12px;font-weight:750;margin-bottom:10px}input,select{display:block;width:100%;padding:11px;margin-top:5px;border:1px solid #d5d6d9;border-radius:9px;font:inherit;background:#fff;color:#111}button{padding:11px 15px;background:#e8541a;color:white;border:0;border-radius:9px;font-weight:800;font:inherit;cursor:pointer}button.secondary{background:#f4f4f4;border:1px solid #ddd;color:#111}button:disabled{opacity:.45;cursor:default}.muted{color:#666;font-size:12px;line-height:1.5}.notice{padding:12px;border-radius:9px;background:#f4f5f6;font-size:13px;overflow-wrap:anywhere}.stats{display:flex;gap:10px}.stats>div{flex:1;background:#f7f7f7;padding:12px;border-radius:10px}.stats b{display:block;font-size:22px}.stats small{color:#666}.item{border:1px solid #e6e6e6;border-radius:11px;padding:12px;margin-top:10px}.item-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.tag{font-size:10px;padding:5px 9px;border-radius:15px;background:#f3f3f3;color:#666;font-weight:800}.secret{font-family:monospace;background:#f4f4f4;padding:12px;overflow-wrap:anywhere;border-radius:8px;font-size:12px}footer{text-align:center;padding:22px;color:#888;font-size:11px}@media(max-width:600px){main{padding:10px}header{padding:18px}.panel{padding:14px}.stats{flex-wrap:wrap}}
+</style></head><body><main><header><div class="eyebrow">FUERZA T · ADMINISTRACIÓN</div><h1>Historial de entrenamiento</h1><p>Credenciales individuales · correspondencias verificadas · sin alterar las series consolidadas</p></header>
+<section class="panel"><h2>1 · Identificar cliente</h2><div class="line"><label>Clave administrativa<input type="password" autocomplete="off" id="adminKey" placeholder="FT_MIGRADOR_KEY"></label><label>AsesoradoID<input id="clientId" value="ase_0031" placeholder="ase_0031"></label><button id="load">Consultar</button></div><div class="notice" id="status">Sin iniciar. Esta herramienta no guarda la clave administrativa.</div></section>
+<section class="panel" id="data" hidden><h2>2 · Cobertura vinculada</h2><div class="stats"><div><small>Confirmados</small><b id="countTotal">0</b></div><div><small>Vinculados</small><b id="countMapped">0</b></div><div><small>Pendientes</small><b id="countPending">0</b></div></div><p class="muted">Un nombre histórico sólo se vincula automáticamente si coincide exactamente con un único ejercicio vigente. Los IDs históricos ambiguos requieren decisión administrativa.</p></section>
+<section class="panel" id="tokens" hidden><h2>3 · Acceso individual</h2><p class="muted">El código de acceso se entrega únicamente al cliente identificado. Nunca compartas FT_MIGRADOR_KEY con asesorados. Emitir uno nuevo invalida el anterior.</p><div id="tokenStatus" class="notice"></div><div style="margin-top:10px"><button id="issue">Generar / renovar acceso del cliente</button> <button id="revoke" class="secondary">Revocar acceso</button></div><div id="issued" hidden style="margin-top:12px"><div class="secret" id="tokenValue"></div><div class="line" style="margin-top:8px"><button id="copyToken">Copiar acceso individual</button></div><p class="muted">Guardalo en un medio privado: el servidor guarda sólo su hash y no puede mostrarlo nuevamente.</p></div></section>
+<section class="panel" id="links" hidden><h2>4 · Correspondencias históricas pendientes</h2><p class="muted">Seleccioná el ejercicio vigente con evidencia real (rutina/snapshot). Por defecto se vincula sólo la semana elegida. Usá “todas” únicamente si comprobaste que el ID histórico no cambió de significado.</p><div id="pending"></div></section><footer>Panel administrativo complementario de Migrador V1. No ejecuta migraciones ni modifica HistorialEntreno.</footer></main>
+<script>
+const API='https://script.google.com/macros/s/AKfycby0tGGby72hf61Td2ctw8pEn1dW-0bgEjNgMKwTlg-0kP06Om3vLwcTlNVLhyyoX4c/exec';
+const $=id=>document.getElementById(id);let current=null,working=false;
+function status(s){$('status').textContent=s;}
+function id(){return $('clientId').value.trim();}function key(){return $('adminKey').value;}
+function safe(t){return String(t==null?'':t);}
+async function query(op='resumen'){
+ const u=new URL(API);u.searchParams.set('action','ftHistAdmin');u.searchParams.set('asesoradoId',id());u.searchParams.set('key',key());u.searchParams.set('op',op);u.searchParams.set('_t',String(Date.now()));
+ const resp=await fetch(u,{cache:'no-store'});if(!resp.ok)throw Error('HTTP '+resp.status);
+ const data=await resp.json();if(!data.ok)throw Error(data.error||'El backend rechazó la solicitud');return data;
+}
+async function post(action,payload){
+ await fetch(API,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,key:key(),asesoradoId:id(),...payload})});
+}
+async function refresh(){
+ if(!key()||!id())return status('Escribí la clave administrativa y AsesoradoID.');
+ if(working)return;working=true;$('load').disabled=true;status('Consultando la hoja confirmada…');
+ try{
+   current=await query();$('data').hidden=false;$('tokens').hidden=false;$('links').hidden=false;
+   $('countTotal').textContent=current.stats.total;$('countMapped').textContent=current.stats.vinculados;
+   $('countPending').textContent=current.stats.sinVincular;
+   $('tokenStatus').textContent=current.tokenConfigurado?'Acceso individual configurado':'Sin acceso individual configurado';
+   renderPending();status('Lectura correcta · '+id()+' · '+current.stats.total+' registros confirmados');
+ }catch(e){current=null;status('Error: '+safe(e.message));}finally{working=false;$('load').disabled=false;}
+}
+function elem(tag,txt,cls){const e=document.createElement(tag);if(txt!==undefined)e.textContent=safe(txt);if(cls)e.className=cls;return e;}
+function opt(value,text){const e=elem('option',text);e.value=value;return e;}
+function renderPending(){
+ const parent=$('pending');parent.replaceChildren();
+ if(!current.pendientes.length){parent.append(elem('p','No hay IDs históricos pendientes en este asesorado.','muted'));return;}
+ current.pendientes.forEach(info=>{
+  const wrap=elem('div',undefined,'item');
+  const head=elem('div',undefined,'item-head');head.append(elem('strong','ID histórico '+info.historicId),elem('span',info.count+' registros · '+info.weeks.length+' semana(s)','tag'));wrap.append(head);
+  wrap.append(elem('p',info.sugerencias.length?'Nombres relacionados en otras semanas: '+info.sugerencias.join(' · '):'Sin nombre verificable. Consultar fuentes originales.','muted'));
+  const line=elem('div',undefined,'line');
+  const lab=elem('label','Ejercicio vigente');const select=document.createElement('select');select.append(opt('','Elegir ejercicio verificado…'));
+  current.ejercicios.forEach(e=>select.append(opt(e.id,e.name+' (ID '+e.id+')')));lab.append(select);line.append(lab);
+  const lw=elem('label','Alcance por semana');const week=document.createElement('select');info.weeks.forEach(w=>week.append(opt(w,w)));week.append(opt('*','Todas las semanas (revisión global)'));lw.append(week);line.append(lw);
+  const ls=elem('label','Sesión');const session=document.createElement('select');['*','A','B','C','D','E'].forEach(s=>session.append(opt(s,s==='*'?'Todas las sesiones':s)));ls.append(session);line.append(ls);
+  const b=elem('button','Confirmar vínculo');b.onclick=async()=>{
+    if(!select.value)return status('Elegí un ejercicio vigente para el ID '+info.historicId);
+    if(!window.confirm('Confirmás que ID histórico '+info.historicId+' corresponde a '+select.options[select.selectedIndex].text+' para '+week.value+' / sesión '+session.value+'? Esta decisión afectará las consultas futuras.'))return;
+    b.disabled=true;status('Enviando correspondencia, verificando…');
+    try{await post('ftHistAdminMap',{historicId:info.historicId,currentId:select.value,semanID:week.value,sesion:session.value,confirmacion:'VINCULAR EJERCICIO',motivo:'Verificado visualmente por administrador'});await new Promise(r=>setTimeout(r,1000));await refresh();}catch(e){status('No se pudo verificar: '+e.message);}finally{b.disabled=false;}
+  };wrap.append(line,b);parent.append(wrap);
+ });
+}
+$('load').onclick=refresh;
+$('issue').onclick=async()=>{
+ if(!current)return;if(!window.confirm('¿Emitir un acceso individual para '+id()+'? Si ya existe otro, quedará revocado.'))return;
+ const a=new Uint8Array(32);crypto.getRandomValues(a);const token=Array.from(a,x=>x.toString(16).padStart(2,'0')).join('');
+ $('issue').disabled=true;status('Emitir acceso individual: enviando…');
+ try{
+  await post('ftHistAdminToken',{token,confirmacion:'EMITIR ACCESO'});
+  // Confirmar token real mediante endpoint autorizado del propio cliente.
+  let authorized=false;
+  for(let i=0;i<5;i++){
+   await new Promise(r=>setTimeout(r,800));
+   const u=new URL(API);u.searchParams.set('action','ftHistRead');u.searchParams.set('asesoradoId',id());u.searchParams.set('token',token);u.searchParams.set('_t',String(Date.now()));
+   try{const r=await fetch(u,{cache:'no-store'});const d=await r.json();if(d.ok&&d.asesoradoId===id()){authorized=true;break;}}catch(_e){}
+  }
+  if(!authorized)throw Error('Todavía no pudo confirmarse el acceso remoto. No lo distribuyas aún.');
+  $('tokenValue').textContent=token;$('issued').hidden=false;status('Acceso individual validado desde el backend. Copialo y entregalo por privado.');
+  $('tokenStatus').textContent='Acceso individual configurado';
+ }catch(e){$('issued').hidden=true;status('Error: '+e.message);}finally{$('issue').disabled=false;}
+};
+$('revoke').onclick=async()=>{
+ if(!current)return;if(!window.confirm('¿Revocar el acceso remoto de '+id()+'?'))return;
+ try{await post('ftHistAdminRevoke',{confirmacion:'REVOCAR ACCESO'});$('issued').hidden=true;await new Promise(r=>setTimeout(r,1000));await refresh();}catch(e){status('Error al revocar: '+e.message);}
+};
+$('copyToken').onclick=async()=>{try{await navigator.clipboard.writeText($('tokenValue').textContent);status('Acceso copiado. Compartilo únicamente con el asesorado correspondiente.');}catch(e){status('Copiá el texto del recuadro manualmente.');}};
+</script></body></html>
