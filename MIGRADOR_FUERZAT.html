@@ -1,0 +1,153 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fuerza T · Migrador Histórico V1</title><script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script><script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script><style>:root{font-family:system-ui,-apple-system,Segoe UI,Arial;color:#1a1a1a;background:#f2f2ef}*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button{border:none;border-radius:9px;padding:11px 15px;background:#e8541a;color:#fff;font-weight:750;cursor:pointer}button:disabled{opacity:.4;cursor:default}button.secondary{background:#f3f3f3;color:#222;border:1px solid #ddd}.primary{width:100%;padding:15px}.app{max-width:1080px;margin:auto;padding:20px}header{background:#111;color:#fff;padding:26px;border-radius:16px;margin-bottom:15px}header h1{font-size:29px;margin:7px 0}header p{color:#aaa;margin:0}.eyebrow{font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#e8541a}header .eyebrow{color:#ff875a}.panel{background:#fff;padding:19px 22px;margin:12px 0;border-radius:15px;box-shadow:0 2px 10px #0000000b}h2{font-size:18px;margin:0 0 12px}h3{font-size:14px;margin:6px 0}p{line-height:1.5}.muted{font-size:12px;color:#6b7280}.notice{border-radius:8px;background:#f4f5f6;padding:13px;font-size:13px;font-weight:600}.subhead{display:flex;align-items:center;justify-content:space-between;gap:8px}.pill,.warn,.good{border-radius:15px;padding:5px 10px;font-size:10px;font-weight:800;background:#f2f2f2;color:#666}.warn{background:#fff3e5;color:#9a4a00}.good{background:#e5f6eb;color:#207e48}.formline{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px}label{font-weight:700;font-size:12px;display:block;flex:1}input:not([type=checkbox]),select{display:block;width:100%;margin-top:6px;padding:11px;border-radius:8px;border:1px solid #cdd1d6;background:#fff;color:#222}.formline button{align-self:flex-end}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:10px 0}.stats>div{background:#f7f7f7;border-radius:8px;padding:12px}.stats small{display:block;color:#777}.stats b{font-size:23px}.conflict{padding:14px;margin:8px 0;background:#fffaf4;border:1px solid #f4dcbd;border-radius:10px}.conflict p{font-size:12px}.resolver{display:flex;flex-wrap:wrap;gap:10px}.resolver label{min-width:150px}.resolver details{width:100%;font-size:11px}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:150px;overflow:auto}.tablewrap{max-height:430px;overflow:auto;border:1px solid #e5e7eb;border-radius:10px}table{border-collapse:collapse;width:100%;font-size:11px}th{position:sticky;top:0;background:#111;color:white;text-align:left;padding:9px}td{border-bottom:1px solid #eee;padding:8px;max-width:220px;overflow-wrap:anywhere}tbody tr:hover{background:#faf7f5}.check{display:flex;gap:10px;align-items:center;padding:17px 0}.check input{width:17px;height:17px}footer{text-align:center;color:#999;font-size:11px;padding:20px}@media(max-width:640px){.app{padding:10px}header{padding:18px}header h1{font-size:24px}.panel{padding:14px}.stats{grid-template-columns:repeat(2,1fr)}.formline>*{width:100%}button{min-height:43px}}
+</style></head><body><div id="root"></div><script>const h=React.createElement,{useState,useMemo,useEffect}=React;
+const API='https://script.google.com/macros/s/AKfycby0tGGby72hf61Td2ctw8pEn1dW-0bgEjNgMKwTlg-0kP06Om3vLwcTlNVLhyyoX4c/exec';
+const PILOT='ase_0031', STORE='ft_migrador_ase_0031_v1';
+const $=(tag,props,...children)=>h(tag,props,...children.flat(Infinity));
+const number=x=>{const n=Number(String(x??'').replace(',','.'));return Number.isFinite(n)&&n>0?n:null};
+const json=x=>{if(x&&typeof x==='object')return x;try{return JSON.parse(x||'null');}catch(e){return null}};
+const clean=x=>String(x??'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+function digestKey(s){let a=2166136261,b=16777619;for(let i=0;i<s.length;i++){a^=s.charCodeAt(i);a=Math.imul(a,b);}return 'ft_'+(a>>>0).toString(16).padStart(8,'0')+'_'+s.length.toString(16);}
+function parseDate(x){const s=String(x||'');const m=s.match(/^(\d\d?)\/(\d\d?)\/(\d{4})/);if(m)return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;const iso=s.match(/\d{4}-\d\d-\d\d/);return iso?iso[0]:''}
+function build(raw){
+ const src=raw.sources||{},exes=src.Ejercicios||[],map=new Map(exes.filter(e=>e.ID).map(e=>[clean(e.Nombre),String(e.ID)]));
+ const groups=new Map(),allReports=[],weekLabels=[],e1Obs=[];
+ const add=(week,sess,id,serie,field,val,origin,ts,exName,code)=>{
+  if(!/^sem_\d+$/.test(week)||!sess||!id||!serie||!number(val))return;
+  const key=[week,sess,id,serie].join('|');let g=groups.get(key);if(!g){g={key,week,sess,id,serie,fields:{reps:[],kg:[]},names:[]};groups.set(key,g)}
+  if(exName&&!g.names.includes(exName))g.names.push(exName);
+  g.fields[field].push({v:number(val),src:origin,ts:ts||'',code:code||'',name:exName||''});
+ };
+ function fromDraft(r,source,index){const d=json(r.Draft||r.DraftAnterior||r.SnapshotJSON||r.BackupJSON||r.Datos||r.JSON);if(!d)return;
+  const week=String(r.SemanID||d.wi||'').trim(),ts=parseDate(r.FechaBackup||r.Fecha||'');
+  const names={};(Array.isArray(d.e)?d.e:[]).forEach(x=>{if(x&&x.id!=null)names[String(x.id)]=String(x.n||x.Nombre||'').trim()});
+  const sr=d.sr||{},used=d.skUsed||{};
+  Object.entries(sr).forEach(([sess,items])=>Object.entries(items||{}).forEach(([id,obj])=>{
+   Object.entries(obj||{}).filter(([k,v])=>/^r[1-9]\d*$/.test(k)).forEach(([k,v])=>add(week,sess,id,Number(k.slice(1)),'reps',v,source+' #'+(index+1),ts,names[id],'sr.'+k));
+   // KG ÚNICO DE EJECUCIÓN: sólo serie 1. sk es carga prevista, nunca se usa como evidencia.
+   const kg=(used[sess]||{})[id];if(number(kg))add(week,sess,id,1,'kg',kg,source+' #'+(index+1),ts,names[id],'skUsed');
+  }));
+  // Cargas con skUsed sin reps: preservar kg como dato parcial de serie 1.
+  Object.entries(used).forEach(([sess,items])=>Object.entries(items||{}).forEach(([id,v])=>{if(number(v))add(week,sess,id,1,'kg',v,source+' #'+(index+1),ts,names[id],'skUsed')}));
+ }
+ (src.Drafts||[]).forEach((r,i)=>fromDraft(r,'Drafts',i));
+ (src.LocalStorage||[]).forEach((r,i)=>fromDraft(r,'LocalStorage',i));
+ (src.DraftBackups||[]).forEach((r,i)=>fromDraft(r,'DraftBackups',i));
+ const reports=[...(src.Reportes||[]).map(r=>({...r,_source:'Reportes'})),...(src.ReporteBackups||[]).map(r=>{const inner=json(r.ReporteAnteriorJSON)||{};return {...inner,AsesoradoID:r.AsesoradoID||inner.AsesoradoID,SemanID:r.SemanID||inner.SemanID,_source:'ReporteBackups'}})];
+ reports.forEach((r,i)=>{
+  const week=String(r.SemanID||'').trim();if(!/^sem_\d+$/.test(week))return;
+  const label=String(r.Semana||'').trim();if(label)weekLabels.push({week,label,src:r._source});
+  const rms=json(r.E1RM)||{};
+  Object.entries(rms).forEach(([name,v])=>{const match=name.match(/^(.*)_([A-E])$/);const sess=match?match[2]:'?',ex=match?match[1]:name;if(number(v))e1Obs.push({week,sess,ex,e1:Number(v),source:r._source+' #'+(i+1),fecha:parseDate(r.Fecha)});});
+ });
+ const conflicts=[];const rows=[];const pick=arr=>{
+  const unique=[...new Set(arr.map(a=>a.v))];return unique;
+ };
+ groups.forEach(g=>{
+  const rs=pick(g.fields.reps),ks=pick(g.fields.kg),ex=g.names[0]||'Ejercicio histórico ID '+g.id;
+  const nameConflict=g.names.length>1&&new Set(g.names.map(clean)).size>1;
+  const eid=map.get(clean(ex))||'';
+  const exp=[PILOT,g.week,g.sess,g.id,'instancia_1'].join('|');
+  const row={RegistroID:digestKey(exp+'|'+g.serie),AsesoradoID:PILOT,SemanID:g.week,Fecha:'',Sesion:g.sess,ExposicionID:exp,EjercicioID:eid,EjercicioIDHistorico:g.id,Ejercicio:ex,Serie:g.serie,TipoSerie:'efectiva',Reps:rs.length===1?rs[0]:'',Kg:ks.length===1?ks[0]:'',E1RM:'',Volumen:'',EstadoDato:'parcial',Fuente:[...new Set([...g.fields.reps,...g.fields.kg].map(a=>a.src))].join(' | '),Metodo:'Series sr; kg skUsed únicamente serie 1',Confianza:'media',Confirmado:'si',FechaConsolidacion:'',MigracionID:''};
+  if(rs.length===1&&ks.length===1){row.EstadoDato='directo';row.Confianza='alta'}
+  if(rs.length>1||ks.length>1){const opts=[];if(rs.length>1)opts.push(...rs.map(v=>({label:'Reps '+v,value:{reps:v}})));if(ks.length>1)opts.push(...ks.map(v=>({label:'Kg '+v,value:{kg:v}})));
+   const id='conf_'+g.key;conflicts.push({id,type:'registro',rowId:row.RegistroID,description:g.week+' · '+g.sess+' · '+ex+' · Serie '+g.serie,detail:'Reps: '+(rs.join(' / ')||'—')+' · kg: '+(ks.join(' / ')||'—'),sources:{reps:g.fields.reps,kg:g.fields.kg},reps:rs,kg:ks});}
+  if(nameConflict)conflicts.push({id:'nom_'+g.key,type:'nombre',rowId:row.RegistroID,description:g.week+' · '+g.sess+' · ID histórico '+g.id,detail:'Nombres divergentes: '+g.names.join(' / '),names:g.names});
+  rows.push(row);
+ });
+ // Reconstrucción Epley: siempre una PROPUESTA administrativa, nunca un kg automático.
+ // Debe coincidir semana/sesión/nombre/r1 y redondeo de e1RM a 0.1 kg.
+ rows.forEach(r=>{
+  if(Number(r.Serie)!==1||r.Kg!==''||!(number(r.Reps)>0)||r.TipoSerie!=='efectiva')return;
+  const matches=e1Obs.filter(o=>o.week===r.SemanID&&o.sess===r.Sesion&&clean(o.ex)===clean(r.Ejercicio));
+  const unique=[...new Set(matches.map(o=>o.e1))];
+  if(unique.length!==1)return;
+  const e1=unique[0],reps=number(r.Reps),raw=e1/(1+reps/30);
+  // Sólo candidatos de discos de 0.5 kg matemáticamente compatibles con e1RM redondeado.
+  const candidates=[];for(let v=Math.floor(raw*2)/2;v<=Math.ceil(raw*2)/2+.001;v+=.5){
+    if(v>0&&Math.abs(Math.round(v*(1+reps/30)*10)/10-e1)<.051)candidates.push(Math.round(v*2)/2);
+  }
+  if(candidates.length===1)conflicts.push({id:'epley_'+r.RegistroID,type:'reconstruccion',rowId:r.RegistroID,
+    description:r.SemanID+' · '+r.Sesion+' · '+r.Ejercicio+' · Serie 1',detail:reps+' reps + e1RM '+e1+' kg → carga propuesta '+candidates[0]+' kg. Requiere confirmar que ese e1RM se calculó a partir de esta misma serie.',candidate:candidates[0],e1});
+ });
+ // El e1RM semanal agregado NO se atribuye a r1 sin prueba de la serie originaria.
+ // Se mantiene como observación parcial, sin inventar reps, kg o número de serie.
+ const e1Seen=new Set();e1Obs.forEach((o,i)=>{
+  const e1Key=[o.week,o.sess,clean(o.ex),o.e1].join('|');if(e1Seen.has(e1Key))return;e1Seen.add(e1Key);
+  const exp=[PILOT,o.week,o.sess,clean(o.ex),'observacion_e1rm'].join('|');
+  const id=digestKey(exp+'|'+o.e1+'|'+o.source);
+  rows.push({RegistroID:id,AsesoradoID:PILOT,SemanID:o.week,Fecha:o.fecha,Sesion:o.sess,ExposicionID:exp,EjercicioID:map.get(clean(o.ex))||'',EjercicioIDHistorico:'',Ejercicio:o.ex,Serie:'',TipoSerie:'observacion',Reps:'',Kg:'',E1RM:o.e1,Volumen:'',EstadoDato:'parcial',Fuente:o.source,Metodo:'e1RM histórico agregado, serie no identificada',Confianza:'media',Confirmado:'si',FechaConsolidacion:'',MigracionID:''});
+ });
+ // Reportes duplicados de una misma semana: conservar separados y exigir decisión.
+ const byWeekReport=new Map();(src.Reportes||[]).forEach((r,i)=>{const wk=String(r.SemanID||'').trim();if(!/^sem_\d+$/.test(wk))return;if(!byWeekReport.has(wk))byWeekReport.set(wk,[]);byWeekReport.get(wk).push({fila:i+2,fecha:r.Fecha||'',etiqueta:r.Semana||''});});
+ byWeekReport.forEach((xs,wk)=>{if(xs.length>1)conflicts.push({id:'duplicado_'+wk,type:'duplicado',description:wk+' · Reportes',detail:xs.length+' filas para la misma semana. Se conservarán las fuentes separadas; sin evidencia no se reasignan automáticamente.',alternatives:xs});});
+ // Conflictos de etiquetas (sin reescribir la semana sin revisión).
+ weekLabels.forEach((x,i)=>{const m=x.label.match(/sem\s*(\d+)/i);if(m&&'sem_'+m[1]!==x.week)conflicts.push({id:'label_'+i,type:'etiqueta',description:x.week+' · '+x.src,detail:'Etiqueta '+x.label+' no coincide con '+x.week,recommended:'conservar '+x.week});});
+ rows.sort((a,b)=>Number(a.SemanID.slice(4))-Number(b.SemanID.slice(4))||a.Sesion.localeCompare(b.Sesion)||String(a.Ejercicio).localeCompare(String(b.Ejercicio))||Number(a.Serie)-Number(b.Serie));
+ return {rows,conflicts,count:{Drafts:(src.Drafts||[]).length,DraftBackups:(src.DraftBackups||[]).length,Reportes:(src.Reportes||[]).length,ReporteBackups:(src.ReporteBackups||[]).length,LocalStorage:(src.LocalStorage||[]).length},weekLabels};
+}
+function finalize(built,decisions,mid){
+ return built.rows.map(base=>{
+  const r={...base};const c=built.conflicts.filter(x=>x.rowId===r.RegistroID);
+  c.forEach(x=>{const sel=decisions[x.id];if(!sel)return;
+   if(x.type==='registro'){
+    if(sel.reps!==undefined)r.Reps=sel.reps==='parcial'?'':sel.reps;
+    if(sel.kg!==undefined)r.Kg=sel.kg==='parcial'?'':sel.kg;
+   }else if(x.type==='nombre'&&sel.name){r.Ejercicio=sel.name;r.EjercicioID='';}else if(x.type==='reconstruccion'&&sel.choice==='accept'){r.Kg=x.candidate;r.Metodo='Epley inversa r1 + e1RM, vinculados por revisión administrativa';r.Confianza='reconstruida';r.Fuente+=' | Reportes E1RM';}
+  });
+  const kg=number(r.Kg),rep=number(r.Reps);
+  r.EstadoDato=kg&&rep?(r.Metodo.includes('Epley inversa')?'reconstruido':'directo'):'parcial';r.Confianza=r.EstadoDato==='reconstruido'?'media':kg&&rep?'alta':'media';
+  r.E1RM=r.TipoSerie==='observacion'?r.E1RM:(kg&&rep&&Number(r.Serie)===1?Math.round(kg*(1+rep/30)*10)/10:'');
+  r.Volumen=kg&&rep?kg*rep:'';r.MigracionID=mid;r.FechaConsolidacion=new Date().toISOString();return r;
+ });
+}
+function Stat({label,num,sub}){return $('div',{className:'stat'},$('small',{},label),$('strong',{},num),sub&&$('span',{},sub))}
+function App(){
+ const [secret,setSecret]=useState(''),[sources,setSources]=useState(null),[built,setBuilt]=useState(null),[decisions,setDecisions]=useState(()=>json(localStorage.getItem(STORE))||{}),[status,setStatus]=useState('Sin iniciar'),[busy,setBusy]=useState(false),[filter,setFilter]=useState('todos'),[view,setView]=useState('revisión'),[verified,setVerified]=useState(null),[approved,setApproved]=useState(false);
+ const mid=useMemo(()=> 'mig_'+Date.now().toString(36)+'_ase0031',[]);
+ const unresolved=built?built.conflicts.filter(x=>{const d=decisions[x.id];if(!d)return true;if(x.type==='registro')return(x.reps.length>1&&(d.reps===undefined||d.reps===''))||(x.kg.length>1&&(d.kg===undefined||d.kg===''));if(x.type==='nombre')return !d.name;if(x.type==='reconstruccion')return !d.choice;return !d.accept;}):[];
+ const rows=built?finalize(built,decisions,mid):[];
+ const stats=useMemo(()=>({weeks:new Set(rows.map(r=>r.SemanID)).size,direct:rows.filter(r=>r.Reps!==''&&r.Kg!=='').length,partial:rows.filter(r=>r.Reps===''||r.Kg==='').length,obs:rows.filter(r=>r.TipoSerie==='observacion').length}),[rows]);
+ function update(k,v){setDecisions(prev=>{const n={...prev,[k]:v};localStorage.setItem(STORE,JSON.stringify(n));return n});setApproved(false)}
+ async function api(action,args={}){const u=new URL(API);u.searchParams.set('action',action);u.searchParams.set('asesoradoId',PILOT);u.searchParams.set('key',secret);u.searchParams.set('_t',Date.now());const r=await fetch(u,{cache:'no-store',redirect:'follow'});if(!r.ok)throw Error('HTTP '+r.status);const d=await r.json();if(!d.ok)throw Error(d.error||'Backend no respondió');return d}
+ async function load(){if(!secret.trim()){setStatus('Ingresá la clave administrativa');return}setBusy(true);setStatus('Consultando fuentes sin modificar Sheets...');try{const d=await api('ftMigSources');let local=[];try{const user=d.asesorado||'Yo';const pre='ase_'+user+'_';for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i)||'';if(!k.startsWith(pre))continue;const m=k.match(/_((?:sem_)\d+)$/);if(!m)continue;const v=localStorage.getItem(k);if(v&&v.includes('\"sr\"'))local.push({SemanID:m[1],Draft:v,Fecha:new Date().toISOString()});}}catch(e){}d.sources.LocalStorage=local;setSources(d);const b=build(d);setBuilt(b);setVerified(null);setStatus('Fuentes consultadas. Revisá conflictos y cobertura antes de confirmar.');}catch(e){setStatus('Error: '+e.message)}finally{setBusy(false)}}
+ async function verify(){setBusy(true);try{const d=await api('ftMigHistorial');setVerified(d.rows||[]);setStatus('Lectura independiente: '+(d.rows||[]).length+' filas de HistorialEntreno.');}catch(e){setStatus('Verificación falló: '+e.message)}finally{setBusy(false)}}
+ async function commit(){if(unresolved.length||!approved||!rows.length)return;const ok=window.confirm('CONFIRMAR migración de '+rows.length+' registros para ase_0031. Nunca se alterarán fuentes originales. ¿Continuar?');if(!ok)return;
+  setBusy(true);setStatus('Enviando lote. No se considera terminado hasta releer HistorialEntreno...');
+  try{
+   const payload=rows.map(r=>({...r,RegistroID:r.RegistroID,FechaConsolidacion:new Date().toISOString()}));
+   await fetch(API,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'ftMigConfirm',key:secret,asesoradoId:PILOT,migracionId:mid,confirmacion:'CONFIRMAR ASESORADO ase_0031',rows:payload,decisions:Object.entries(decisions).map(([id,value])=>({id,value}))})});
+   let found=0,last=[];for(let i=0;i<4;i++){await new Promise(r=>setTimeout(r,1300));const d=await api('ftMigHistorial');last=d.rows||[];const ids=new Set(last.map(x=>String(x.RegistroID)));const byId=new Map(last.map(x=>[String(x.RegistroID),x]));found=payload.filter(x=>{const v=byId.get(x.RegistroID);return !!v&&['SemanID','Sesion','Ejercicio','Serie','Reps','Kg'].every(k=>String(v[k]??'')===String(x[k]??''));}).length;if(found===payload.length)break;}
+   setVerified(last);setStatus(found===payload.length?'VERIFICADO: '+found+'/'+payload.length+' filas re-leídas desde Sheets.':'SIN CONFIRMACIÓN: '+found+'/'+payload.length+' filas detectadas. No asumir éxito. Revisar MigracionesEntreno.');
+  }catch(e){setStatus('No fue posible verificar la persistencia: '+e.message)}finally{setBusy(false)}
+ }
+ const shown=rows.filter(r=>filter==='todos'||r.SemanID===filter);
+ return $('div',{className:'app'},$('header',{},$('div',{className:'eyebrow'},'FUERZA T · PATRIMONIO HISTÓRICO'),$('h1',{},'Migrador de entrenamiento'),$('p',{},'Piloto exclusivo ase_0031 · revisión manual · fuentes originales protegidas')),
+ $('section',{className:'panel'},$('div',{className:'subhead'},$('h2',{},'1 · Consultar fuentes'),$('span',{className:'pill'},'SIN ESCRITURA')),
+ $('div',{className:'formline'},$('label',{},'Clave administrativa', $('input',{type:'password',value:secret,placeholder:'FT_MIGRADOR_KEY · Script Properties',onChange:e=>setSecret(e.target.value,)})),$('button',{disabled:busy,onClick:load},busy?'Consultando...':'Iniciar auditoría')),
+ $('p',{className:'muted'},'La clave no se guarda en localStorage. El migrador sólo consulta información del piloto.'),$('div',{className:'notice'},status)),
+ built&&$('section',{className:'panel'},$('div',{className:'subhead'},$('h2',{},'2 · Cobertura detectada'),$('span',{className:'pill'},'PREVISUALIZACIÓN')),
+ $('div',{className:'stats'},$('div',{},$('small',{},'Drafts'),$('b',{},built.count.Drafts)), $('div',{},$('small',{},'Backups'),$('b',{},built.count.DraftBackups)), $('div',{},$('small',{},'Reportes'),$('b',{},built.count.Reportes)), $('div',{},$('small',{},'ReporteBackups'),$('b',{},built.count.ReporteBackups))),
+ $('div',{className:'stats'},$('div',{},$('small',{},'Semanas'),$('b',{},stats.weeks)), $('div',{},$('small',{},'Serie completa'),$('b',{},stats.direct)), $('div',{},$('small',{},'Parciales'),$('b',{},stats.partial)), $('div',{},$('small',{},'e1RM aislados'),$('b',{},stats.obs))),
+ $('p',{className:'muted'},'Criterio: kg de skUsed sólo en serie 1. Las series 2+ conservan sus reps sin kg salvo evidencia explícita. e1RM agregado queda como observación.')),
+ built&&$('section',{className:'panel'},$('div',{className:'subhead'},$('h2',{},'3 · Resolver inconsistencias'),$('span',{className:unresolved.length?'warn':'good'},unresolved.length+' pendientes')),
+ built.conflicts.length===0?$('p',{},'No se encontraron contradicciones explícitas.'):built.conflicts.map(c=>$('div',{key:c.id,className:'conflict'},$('div',{className:'eyebrow'},c.type==='registro'?'DATOS CONTRADICTORIOS':c.type==='nombre'?'IDENTIDAD AMBIGUA':'SEMANA/ETIQUETA'),$('h3',{},c.description),$('p',{},c.detail),
+ c.type==='registro'?$('div',{className:'resolver'},
+ c.reps.length>1&&$('label',{},'Repeticiones', $('select',{value:decisions[c.id]?.reps??'',onChange:e=>update(c.id,{...(decisions[c.id]||{}),reps:e.target.value==='parcial'?'parcial':Number(e.target.value)})},$('option',{value:''},'Seleccionar evidencia'),...c.reps.map(n=>$('option',{value:n},n+' reps')),$('option',{value:'parcial'},'Conservar desconocidas'))),
+ c.kg.length>1&&$('label',{},'Carga ejecutada', $('select',{value:decisions[c.id]?.kg??'',onChange:e=>update(c.id,{...(decisions[c.id]||{}),kg:e.target.value==='parcial'?'parcial':Number(e.target.value)})},$('option',{value:''},'Seleccionar evidencia'),...c.kg.map(n=>$('option',{value:n},n+' kg')),$('option',{value:'parcial'},'Conservar desconocida'))),
+ $('details',{},$('summary',{},'Ver fuentes'),$('pre',{},JSON.stringify(c.sources,null,2)))):
+ c.type==='nombre'?$('select',{value:decisions[c.id]?.name||'',onChange:e=>update(c.id,{name:e.target.value})},$('option',{value:''},'Elegí identidad histórica'),...c.names.map(n=>$('option',{value:n},n)),$('option',{value:'Sin vincular'},'Conservar sin vincular')):
+ c.type==='duplicado'?$('div',{},$('p',{className:'muted'},'Se recomienda preservar las filas originales, no fusionar exposiciones y continuar la auditoría de identidad.'),$('button',{className:'secondary',onClick:()=>update(c.id,{accept:true})},decisions[c.id]?'✓ Revisado':'Conservar evidencia sin fusionar'),$('details',{},$('summary',{},'Ver filas'),$('pre',{},JSON.stringify(c.alternatives,null,2)))):
+ c.type==='reconstruccion'?$('div',{},$('p',{className:'muted'},'Sólo aceptar si comprobaste el origen del e1RM; no basta con que el resultado matemático coincida.'),$('button',{className:'secondary',onClick:()=>update(c.id,{choice:'reject'})},'Conservar kg desconocido'), ' ', $('button',{onClick:()=>update(c.id,{choice:'accept'})},'Confirmar '+c.candidate+' kg'),decisions[c.id]&&$('span',{className:'good'},decisions[c.id].choice==='accept'?'Reconstrucción aceptada':'Conservado parcial')):
+ $('div',{},$('p',{className:'muted'},'Recomendación: conservar SemanID lógico y documentar etiqueta errónea.'),$('button',{className:'secondary',onClick:()=>update(c.id,{accept:true})},decisions[c.id]?'✓ Confirmado':'Confirmar SemanID')))),
+ $('p',{className:'muted'},'Las decisiones se guardan localmente como borrador; no modifican Sheets hasta tu confirmación final.')),
+ built&&$('section',{className:'panel'},$('div',{className:'subhead'},$('h2',{},'4 · Revisar registros concretos'),$('span',{className:'pill'},rows.length+' filas')),
+ $('div',{className:'formline'},$('label',{},'Semana', $('select',{value:filter,onChange:e=>setFilter(e.target.value)},$('option',{value:'todos'},'Todas'),...[...new Set(rows.map(r=>r.SemanID))].sort((a,b)=>Number(a.slice(4))-Number(b.slice(4))).map(w=>$('option',{value:w},w)))), $('button',{className:'secondary',onClick:()=>{const data=JSON.stringify({asesoradoId:PILOT,rows,decisions,generatedAt:new Date().toISOString()},null,2);const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download='AUDITORIA_ase_0031.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}},'Exportar auditoría JSON')),
+ $('div',{className:'tablewrap'},$('table',{},$('thead',{},$('tr',{},['Semana','Ses.','Ejercicio','Serie','Reps','Kg','e1RM','Tipo','Fuente'].map(x=>$('th',{},x)))), $('tbody',{},shown.map((r,i)=>$('tr',{key:r.RegistroID},...([r.SemanID,r.Sesion,r.Ejercicio,r.Serie||'Obs.',r.Reps||'—',r.Kg||'—',r.E1RM||'—',r.EstadoDato,r.Fuente].map(x=>$('td',{},String(x))))))))),
+ $('label',{className:'check'},$('input',{type:'checkbox',checked:approved,onChange:e=>setApproved(e.target.checked)}),'Revisé la cobertura y el detalle de las series. Apruebo consolidar este lote.'),
+ $('button',{className:'primary',disabled:busy||unresolved.length>0||!approved||!rows.length,onClick:commit},'Confirmar migración · '+rows.length+' registros'),
+ unresolved.length>0&&$('p',{className:'muted'},'Primero resolvé '+unresolved.length+' conflictos obligatorios.')),
+ built&&$('section',{className:'panel'},$('div',{className:'subhead'},$('h2',{},'5 · Verificar persistencia'),$('button',{className:'secondary',disabled:busy,onClick:verify},'Releer HistorialEntreno')),verified&&$('p',{},'La hoja devuelve '+verified.length+' registros del piloto. Comprobá cantidad y valores antes de dar por cerrada la migración.')),
+ $('footer',{},'Versión piloto V1 · Nunca modifica Drafts, DraftBackups ni Reportes.'));
+}
+ReactDOM.createRoot(document.getElementById('root')).render($(App,{}));
+</script></body></html>
